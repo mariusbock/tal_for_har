@@ -1,0 +1,293 @@
+# ------------------------------------------------------------------------
+# Methods used for training inertial-based models
+# ------------------------------------------------------------------------
+# Adaption by: Anonymized
+# E-Mail: anonymized
+# ------------------------------------------------------------------------
+import os
+import time
+import numpy as np
+import pandas as pd
+
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.utils import compute_class_weight
+import torch
+from torch.utils.data import DataLoader
+import torch.nn as nn
+
+from utils.data_utils import convert_samples_to_segments, unwindow_inertial_data
+from utils.torch_utils import init_weights, save_checkpoint, worker_init_reset_seed, InertialDataset
+from utils.os_utils import mkdir_if_missing
+from inertial_baseline.AttendAndDiscriminate import AttendAndDiscriminate, compute_center_loss, get_center_delta
+from inertial_baseline.DeepConvLSTM import DeepConvLSTM, ShallowDeepConvLSTM
+from inertial_baseline.TinyHAR import TinyHAR
+from camera_baseline.actionformer.libs.utils.metrics import ANETdetection
+
+
+def run_inertial_network(train_sbjs, val_sbjs, cfg, ckpt_folder, ckpt_freq, resume, rng_generator, run):
+    split_name = cfg['dataset']['json_anno'].split('/')[-1].split('.')[0]
+    # load train and val inertial data
+    train_data, val_data = np.empty((0, cfg['dataset']['input_dim'] + 2)), np.empty((0, cfg['dataset']['input_dim'] + 2))
+    for t_sbj in train_sbjs:
+        t_data = pd.read_csv(os.path.join(cfg['dataset']['sens_folder'], t_sbj + '.csv'), index_col=False, low_memory=False).replace({"label": cfg['label_dict']}).fillna(0).to_numpy()
+        train_data = np.append(train_data, t_data, axis=0)
+    for v_sbj in val_sbjs:
+        v_data = pd.read_csv(os.path.join(cfg['dataset']['sens_folder'], v_sbj + '.csv'), index_col=False, low_memory=False).replace({"label": cfg['label_dict']}).fillna(0).to_numpy()
+        val_data = np.append(val_data, v_data, axis=0)
+
+    # define inertial datasets
+    train_dataset = InertialDataset(train_data, cfg['dataset']['window_size'], cfg['dataset']['window_overlap'], model=cfg['name'])
+    test_dataset = InertialDataset(val_data, cfg['dataset']['window_size'], cfg['dataset']['window_overlap'], model=cfg['name'])
+
+    # define dataloaders
+    if cfg['name'] == "shallow_deepconvlstm":
+        print("DID NOT SHUFFLE")
+        train_loader = DataLoader(train_dataset, cfg['loader']['train_batch_size'], shuffle=False, num_workers=4, worker_init_fn=worker_init_reset_seed, generator=rng_generator, persistent_workers=True)
+    else:
+        train_loader = DataLoader(train_dataset, cfg['loader']['train_batch_size'], shuffle=True, num_workers=4, worker_init_fn=worker_init_reset_seed, generator=rng_generator, persistent_workers=True)
+    test_loader = DataLoader(test_dataset, cfg['loader']['test_batch_size'], shuffle=False, num_workers=4, worker_init_fn=worker_init_reset_seed, generator=rng_generator, persistent_workers=True)
+    
+    # define network
+    if cfg['name'] == 'deepconvlstm':
+        net = DeepConvLSTM(
+            train_dataset.channels, train_dataset.classes, train_dataset.window_size,
+            cfg['model']['conv_kernels'], cfg['model']['conv_kernel_size'], 
+            cfg['model']['lstm_units'], cfg['model']['lstm_layers'], cfg['model']['dropout'], cfg['model']['feature_extract']
+            )
+        print("Number of learnable parameters for DeepConvLSTM: {}".format(sum(p.numel() for p in net.parameters() if p.requires_grad)))
+        criterion = nn.CrossEntropyLoss()
+    elif cfg['name'] == 'shallow_deepconvlstm':
+        net = ShallowDeepConvLSTM(
+            train_dataset.channels, train_dataset.classes, train_dataset.window_size,
+            cfg['model']['conv_kernels'], cfg['model']['conv_kernel_size'], 
+            cfg['model']['lstm_units'], cfg['model']['lstm_layers'], cfg['model']['dropout']
+            )
+        print("Number of learnable parameters for DeepConvLSTM: {}".format(sum(p.numel() for p in net.parameters() if p.requires_grad)))
+        criterion = nn.CrossEntropyLoss()
+    elif cfg['name'] == 'attendanddiscriminate':
+        net = AttendAndDiscriminate(
+            train_dataset.channels, train_dataset.classes, cfg['model']['hidden_dim'], cfg['model']['conv_kernels'], cfg['model']['conv_kernel_size'], cfg['model']['enc_layers'], cfg['model']['enc_is_bidirectional'], cfg['model']['dropout'], cfg['model']['dropout_rnn'], cfg['model']['dropout_cls'], cfg['model']['activation'], cfg['model']['sa_div'], cfg['model']['feature_extract']
+            )
+        print("Number of learnable parameters for A-and-D: {}".format(sum(p.numel() for p in net.parameters() if p.requires_grad)))
+        criterion = nn.CrossEntropyLoss(reduction="mean")
+    elif cfg['name'] == 'tinyhar':
+        net = TinyHAR((100, 1, train_dataset.features.shape[1], train_dataset.channels), train_dataset.classes, cfg['model']['conv_kernels'], cfg['model']['conv_layers'], cfg['model']['conv_kernel_size'], dropout=cfg['model']['dropout'], feature_extract=cfg['model']['feature_extract'])
+        print("Number of learnable parameters for TinyHAR: {}".format(sum(p.numel() for p in net.parameters() if p.requires_grad)))
+        criterion = nn.CrossEntropyLoss()
+
+    # define criterion and optimizer
+    opt = torch.optim.Adam(net.parameters(), lr=cfg['train_cfg']['lr'], weight_decay=cfg['train_cfg']['weight_decay'])
+
+    # use lr schedule if selected
+    if cfg['train_cfg']['lr_step'] > 0:
+        scheduler = torch.optim.lr_scheduler.StepLR(opt, step_size=cfg['train_cfg']['lr_step'], gamma=cfg['train_cfg']['lr_decay'])
+    
+    # use weighted loss if selected
+    if cfg['train_cfg']['weighted_loss']:
+        class_weights = compute_class_weight('balanced', classes=np.unique(train_dataset.labels) + 1, y=train_dataset.labels + 1)
+        criterion.weight = torch.tensor(class_weights).float().to(cfg['device'])
+
+    if resume:
+        if os.path.isfile(resume):
+            checkpoint = torch.load(resume, map_location = lambda storage, loc: storage.cuda(cfg['device']))
+            start_epoch = checkpoint['epoch']
+            net.load_state_dict(checkpoint['state_dict'])
+            opt.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{:s}' (epoch {:d}".format(resume, checkpoint['epoch']))
+            del checkpoint
+        else:
+            print("=> no checkpoint found at '{}'".format(resume))
+            return
+    else:
+        net = init_weights(net, cfg['train_cfg']['weight_init'])
+        start_epoch = 0
+
+    net.to(cfg['device'])
+    for epoch in range(start_epoch, cfg['train_cfg']['epochs']):
+        # training
+        if 'attendanddiscriminate' in cfg['name']:
+            net, t_losses, _, _ = train_one_epoch(train_loader, net, opt, criterion, cfg['device'], cfg['train_cfg']['beta'], cfg['train_cfg']['lr_cent'], cfg['name'])
+        else:
+            net, t_losses, _, _ = train_one_epoch(train_loader, net, opt, criterion, cfg['device'], network_name=cfg['name'], feature_extract=cfg['model']['feature_extract'])
+
+        # save ckpt once in a while
+        if (((ckpt_freq > 0) and ((epoch + 1) % ckpt_freq == 0))):
+            save_states = { 
+                'epoch': epoch + 1,
+                'state_dict': net.state_dict(),
+                'optimizer': opt.state_dict(),
+            }
+
+            file_name = 'epoch_{:03d}_{}.pth.tar'.format(epoch + 1, split_name)
+            save_checkpoint(save_states, False, file_folder=os.path.join(ckpt_folder, 'ckpts'), file_name=file_name)
+
+        # validation
+        #prof.start_profile()
+        v_losses, v_preds, v_gt = validate_one_epoch(test_loader, net, criterion, cfg['device'], network_name=cfg['name'], feature_extract=cfg['model']['feature_extract'])
+
+        if cfg['train_cfg']['lr_step'] > 0:
+            scheduler.step()
+            
+
+        det_eval = ANETdetection(cfg['dataset']['json_anno'], 'validation', tiou_thresholds = cfg['dataset']['tiou_thresholds'])
+        # undwindow inertial data (sample-wise structure instead of windowed) 
+        v_preds, v_gt = unwindow_inertial_data(val_data, test_dataset.ids, v_preds, cfg['dataset']['window_size'], cfg['dataset']['window_overlap'])
+        # convert to samples (for mAP calculation)
+        v_segments = convert_samples_to_segments(val_data[:, 0], v_preds, cfg['dataset']['sampling_rate'])
+
+        if epoch == (start_epoch + cfg['train_cfg']['epochs']) - 1:
+            # save raw results (for later postprocessing)
+            v_results = pd.DataFrame({
+                    'video_id' : v_segments['video-id'],
+                    't_start' : v_segments['t-start'].tolist(),
+                    't_end': v_segments['t-end'].tolist(),
+                    'label': v_segments['label'].tolist(),
+                    'score': v_segments['score'].tolist()
+            })
+            mkdir_if_missing(os.path.join(ckpt_folder, 'unprocessed_results'))
+            np.save(os.path.join(ckpt_folder, 'unprocessed_results', 'v_preds_' + split_name), v_preds)
+            np.save(os.path.join(ckpt_folder, 'unprocessed_results', 'v_gt_' + split_name), v_gt)
+            v_results.to_csv(os.path.join(ckpt_folder, 'unprocessed_results', 'v_seg_' + split_name + '.csv'), index=False)
+
+        # calculate validation metrics
+        v_mAP, _ = det_eval.evaluate(v_segments)
+        conf_mat = confusion_matrix(v_gt, v_preds, normalize='true')
+        v_acc = conf_mat.diagonal()/conf_mat.sum(axis=1)
+        v_prec = precision_score(v_gt, v_preds, average=None, zero_division=1)
+        v_rec = recall_score(v_gt, v_preds, average=None, zero_division=1)
+        v_f1 = f1_score(v_gt, v_preds, average=None, zero_division=1)
+
+        # print results to terminal
+        block1 = 'Epoch: [{:03d}/{:03d}]'.format(epoch, cfg['train_cfg']['epochs'])
+        block2 = 'TRAINING:\tavg. loss {:.2f}'.format(np.nanmean(t_losses))
+        block3 = 'VALIDATION:\tavg. loss {:.2f}'.format(np.nanmean(v_losses))
+        block4 = ''
+        block4  += '\t\tAvg. mAP {:>4.2f} (%) '.format(np.nanmean(v_mAP) * 100)
+        for tiou, tiou_mAP in zip(cfg['dataset']['tiou_thresholds'], v_mAP):
+            block4 += 'mAP@' + str(tiou) +  ' {:>4.2f} (%) '.format(tiou_mAP*100)
+        block4  += '\n\t\tAcc {:>4.2f} (%)'.format(np.nanmean(v_acc) * 100)
+        block4  += ' Prec {:>4.2f} (%)'.format(np.nanmean(v_prec) * 100)
+        block4  += ' Rec {:>4.2f} (%)'.format(np.nanmean(v_rec) * 100)
+        block4  += ' F1 {:>4.2f} (%)'.format(np.nanmean(v_f1) * 100)
+
+        print('\n'.join([block1, block2, block3, block4]))
+
+        if run is not None:
+            run[split_name].append({"train_loss": np.nanmean(t_losses), "val_loss": np.nanmean(v_losses), "accuracy": np.nanmean(v_acc), "precision": np.nanmean(v_prec), "recall": np.nanmean(v_rec), 'f1': np.nanmean(v_f1), 'mAP': np.nanmean(v_mAP)}, step=epoch)
+            for tiou, tiou_mAP in zip(cfg['dataset']['tiou_thresholds'], v_mAP):
+                run[split_name].append({'mAP@' + str(tiou): tiou_mAP}, step=epoch)
+
+    return t_losses, v_losses, v_mAP, v_preds, v_gt, net
+
+
+def train_one_epoch(loader, network, opt, criterion, gpu=None, beta=0.0003, lr_cent=0.001, network_name='deepconvlstm', feature_extract=None):
+    losses, preds, gt = [], [], []
+    network.train()
+    for i, (inputs, targets) in enumerate(loader):
+        if 'attendanddiscriminate' in network_name:
+            if gpu is not None:
+                inputs, targets = inputs.to(gpu), targets.view(-1).to(gpu)
+            centers = network.centers
+            z, output = network(inputs)
+            center_loss = compute_center_loss(z, centers, targets)
+            batch_loss = criterion(output, targets) + beta * center_loss
+        elif feature_extract is not None:
+            if gpu is not None:
+                inputs, targets = inputs.to(gpu), targets.to(gpu)
+            output, _ = network(inputs)
+            batch_loss = criterion(output, targets)
+        else:
+            if gpu is not None:
+                inputs, targets = inputs.to(gpu), targets.to(gpu)
+            output = network(inputs)
+            batch_loss = criterion(output, targets)
+
+        opt.zero_grad()
+        batch_loss.backward()
+        opt.step()
+        if 'attendandiscriminate' in network_name:
+            center_deltas = get_center_delta(z.data, centers, targets, lr_cent)
+            network.centers = centers - center_deltas
+        # append train loss to list
+        losses.append(batch_loss.item())
+
+        # create predictions and append them to final list
+        batch_preds = np.argmax(output.cpu().detach().numpy(), axis=-1)
+        batch_gt = targets.cpu().numpy().flatten()
+        preds = np.concatenate((preds, batch_preds))
+        gt = np.concatenate((gt, batch_gt))
+    
+    return network, losses, preds, gt
+
+
+def validate_one_epoch(loader, network, criterion, gpu=None, network_name='deepconvlstm', feature_extract=None, feature_folder=None):
+    losses, preds, gt, feats = [], [], [], None
+
+    network.eval()
+    with torch.no_grad():
+        # iterate over validation dataset
+        for i, (inputs, targets) in enumerate(loader):
+            # send inputs through network to get predictions, loss and calculate softmax probabilities
+            if 'attendanddiscriminate' in network_name:
+                # send x and y to GPU
+                if gpu is not None:
+                    inputs, targets = inputs.to(gpu), targets.view(-1).to(gpu)
+                z, output = network(inputs)
+            elif feature_extract is not None:
+                inputs, targets = inputs.to(gpu), targets.to(gpu)
+                output, feat = network(inputs)
+            else:
+                # send x and y to GPU
+                if gpu is not None:
+                    inputs, targets = inputs.to(gpu), targets.to(gpu)
+                output = network(inputs)
+            batch_loss = criterion(output, targets.long())
+            losses.append(batch_loss.item())
+
+            # create predictions and append them to final list
+            batch_preds = np.argmax(output.cpu().detach().numpy(), axis=-1)
+            batch_gt = targets.cpu().numpy().flatten()
+            preds = np.concatenate((preds, batch_preds))
+            gt = np.concatenate((gt, batch_gt))
+            if feature_extract is not None:
+                batch_feat = feat.cpu().detach().numpy()
+                if feats is None:
+                    feats = batch_feat
+                else:
+                    feats = np.concatenate((feats, batch_feat), axis=0)
+    if feature_folder is not None:
+        np.save(feature_folder, feats)
+    return losses, preds, gt
+
+def run_inertial_network_for_features(net, sbjs, cfg, save_folder, gpu=None):
+    for sbj in sbjs:
+        features = None
+        v_data = pd.read_csv(os.path.join(cfg['dataset']['sens_folder'], sbj + '.csv'),
+                             index_col=False).replace({"label": cfg['label_dict']}).fillna(0).to_numpy()
+        # define inertial datasets
+        val_dataset = InertialDataset(v_data, cfg['dataset']['window_size'], cfg['dataset']['window_overlap'])
+        val_loader = DataLoader(val_dataset, 100, shuffle=False, num_workers=4, worker_init_fn=worker_init_reset_seed, persistent_workers=True)
+        net.to(gpu)
+        net.eval()
+        with torch.no_grad():
+            # iterate over validation dataset
+            for i, (inputs, targets) in enumerate(val_loader):
+                # send x and y to GPU
+                if gpu is not None:
+                    inputs, targets = inputs.to(gpu), targets.to(gpu)
+
+                # send inputs through network to get predictions, loss and calculate softmax probabilities
+                _, feat = net(inputs)
+                if features is None:
+                    features = feat
+                else:
+                    features = torch.cat((features, feat), dim=0)
+        
+        # Convert the features to a numpy
+        # Assuming lstm_features is a PyTorch tensor
+        features_np = features.cpu().detach().numpy()
+
+        # Ensure the destination folder exists, if not, create it
+        os.makedirs(save_folder, exist_ok=True)
+        filename = os.path.join(save_folder, sbj + '.npy')
+        np.save(filename, features_np)

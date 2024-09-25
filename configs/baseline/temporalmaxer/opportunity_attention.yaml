@@ -1,0 +1,96 @@
+name: temporalmaxer
+dataset_name: opportunity
+has_null: True
+train_split: ['training']
+val_split: ['validation']
+two_stage: True
+anno_json: [
+  'data/opportunity/annotations/loso_sbj_0.json',
+  'data/opportunity/annotations/loso_sbj_1.json',
+  'data/opportunity/annotations/loso_sbj_2.json',
+  'data/opportunity/annotations/loso_sbj_3.json',
+]
+dataset: {
+  feat_folder: ./data/opportunity/processed/attention_features,
+  sens_folder: ./data/opportunity/raw/inertial,
+  sampling_rate: 30,
+  file_prefix: ~,
+  file_ext: .npy,
+  feat_stride: 15,
+  num_frames: 30,
+  input_dim: 40,
+  num_classes: 17,
+  downsample_rate: 1,
+  max_seq_len: 2304,
+  trunc_thresh: 0.3,
+  crop_ratio: [0.9, 1.0],
+  tiou_thresholds: [0.3, 0.4, 0.5, 0.6, 0.7],
+  default_fps: null,
+  force_upsampling: False,
+}
+model: {
+  model_name: TemporalMaxerArchitecture,
+  backbone_type: convPooler,
+  fpn_type: identity,
+  fpn_norm: layernorm,
+  backbone_arch: [2, 5],
+  scale_factor: 2,
+  regression_range: [[0, 4], [2, 8], [4, 16], [8, 32], [16, 64], [32, 10000]],
+  embd_kernel_size: 3,
+  embd_dim: 512,
+  embd_with_ln: True,
+  fpn_dim: 512,
+  fpn_with_ln: True,
+  fpn_start_level: 0,
+  head_dim: 512,
+  head_kernel_size: 3,
+  head_num_layers: 3,
+  head_with_ln: True,
+  max_buffer_len_factor: 8.0,
+  assigner: {
+    iou_weight: 2,
+    cls_weight: 1.0,
+    center_radius: 1.5,
+    keep_percent: 1.0,
+    confuse_weight: 0.0
+  }
+}
+opt: {
+  type: AdamW,
+  momentum: 0.9,
+  weight_decay: 0.05,
+  learning_rate: 0.0001,
+  epochs: 100,
+  warmup: True,
+  warmup_epochs: 5,
+  schedule_type: cosine,
+  schedule_steps: [],
+  schedule_gamma: 0.1,    
+}
+loader: {
+  train_batch_size: 2,
+  test_batch_size: 1,
+  num_workers: 4,
+}
+train_cfg: {
+  loss_weight: 1.0,
+  cls_prior_prob: 0.01,
+  center_sample: null,
+  init_loss_norm: 250,
+  clip_grad_l2norm: 1.0,
+  head_empty_cls: [],
+  label_smoothing: 0.0,
+}
+test_cfg: {
+  pre_nms_topk: 5000,
+  pre_nms_thresh: 0.001,
+  iou_threshold: 0.1,
+  min_score: 0.0,
+  max_seg_num: 2000,
+  nms_method: 'soft',
+  nms_sigma: 0.4,
+  duration_thresh: 0.05,
+  multiclass_nms: True,
+  voting_thresh: 0.75,
+  ext_score_file: null,
+}

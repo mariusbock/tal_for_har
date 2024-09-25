@@ -1,0 +1,49 @@
+name: tinyhar
+dataset_name: rwhar
+has_null: False
+anno_json: [
+  'data/rwhar/annotations/loso_sbj_0.json',
+  'data/rwhar/annotations/loso_sbj_1.json',
+  'data/rwhar/annotations/loso_sbj_2.json',
+  'data/rwhar/annotations/loso_sbj_3.json',
+  'data/rwhar/annotations/loso_sbj_4.json',
+  'data/rwhar/annotations/loso_sbj_5.json',
+  'data/rwhar/annotations/loso_sbj_6.json',
+  'data/rwhar/annotations/loso_sbj_7.json',
+  'data/rwhar/annotations/loso_sbj_8.json',
+  'data/rwhar/annotations/loso_sbj_9.json',
+  'data/rwhar/annotations/loso_sbj_10.json',
+  'data/rwhar/annotations/loso_sbj_11.json',
+  'data/rwhar/annotations/loso_sbj_12.json',
+  'data/rwhar/annotations/loso_sbj_13.json',
+  'data/rwhar/annotations/loso_sbj_14.json',
+]
+dataset: {
+  sens_folder: ./data/rwhar/raw/inertial,
+  input_dim: 21,
+  sampling_rate: 50,
+  num_classes: 8,
+  window_size: 50,
+  window_overlap: 50,
+  tiou_thresholds: [0.3, 0.4, 0.5, 0.6, 0.7]
+}
+model: {
+  conv_kernels: 20,
+  conv_layers: 4,
+  conv_kernel_size: 9,
+  dropout: 0.5,
+  feature_extract: null,
+}
+train_cfg: {
+  lr: 0.0001,
+  lr_decay: 0.9,
+  lr_step: 10,
+  epochs: 100,
+  weight_decay: 0.000001,
+  weight_init: 'xavier_normal',
+  weighted_loss: True,
+}
+loader: {
+  train_batch_size: 100,
+  test_batch_size: 1,
+}
