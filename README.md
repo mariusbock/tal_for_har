@@ -26,3 +26,9 @@ Please follow instructions mentioned in the [README.md](/postprocessing/README.m
 
 ## Logging using Neptune.ai
 In order to log experiments to [Neptune.ai](https://neptune.ai) please provide `project` and `api_token` information in your local deployment (see lines `29-30` in `main.py`)
+
+## Contact
+Marius Bock (marius.bock@uni-siegen.de)
+
+## Cite as
+Coming soon
