@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------
 # Data operation utilities
 # ------------------------------------------------------------------------
-# Adaption by: anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 
 import numpy as np

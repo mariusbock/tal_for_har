@@ -3,8 +3,8 @@
 # ------------------------------------------------------------------------
 # https://github.com/TuanTNG/TemporalMaxer
 # ------------------------------------------------------------------------
-# Adaption by: Anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import os
 import time

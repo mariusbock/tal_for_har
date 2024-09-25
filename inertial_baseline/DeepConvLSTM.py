@@ -2,8 +2,8 @@
 # DeepConvLSTM model based on architecture suggested by Ordonez and Roggen 
 # https://www.mdpi.com/1424-8220/16/1/115
 # ------------------------------------------------------------------------
-# Adaption by: Anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 
 from torch import nn

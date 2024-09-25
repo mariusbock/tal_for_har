@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------
 # Main script used to commence experiments
 # ------------------------------------------------------------------------
-# Adaption by: Anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)

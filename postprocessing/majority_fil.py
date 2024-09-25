@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------
 # Postprocessing script used for majority filtering inertial predictions
 # ------------------------------------------------------------------------
-# Adaption by: anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import os
 import json

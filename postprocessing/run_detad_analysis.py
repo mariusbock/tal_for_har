@@ -2,8 +2,8 @@
 # Main script to run DETAD analysis based on publication by Alwassel et al.
 # https://github.com/HumamAlwassel/DETAD
 # ------------------------------------------------------------------------
-# Adaption by: anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import glob
 import itertools

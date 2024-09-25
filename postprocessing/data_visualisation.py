@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------
 # Scripts used for creating color-based prediction timeline visualization
 # ------------------------------------------------------------------------
-# Adaption by: anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import os
 from matplotlib import pyplot as plt

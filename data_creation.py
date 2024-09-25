@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------
 # Data creation utilities used for creating the datasets
 # ------------------------------------------------------------------------
-# Adaption by: Anonyimized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import os
 import json

@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------
 # Utils used for postprocessing inertial and camera predictions
 # ------------------------------------------------------------------------
-# Adaption by: anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import json
 import numpy as np

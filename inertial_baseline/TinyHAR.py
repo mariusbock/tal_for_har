@@ -3,8 +3,8 @@
 # ------------------------------------------------------------------------
 # https://github.com/teco-kit/ISWC22-HAR
 # ------------------------------------------------------------------------
-# Adaption by: Anonymized
-# E-Mail: anonymized
+# Adaption by: Marius Bock
+# E-Mail: marius.bock@uni-siegen.de
 # ------------------------------------------------------------------------
 import torch
 import torch.nn as nn
