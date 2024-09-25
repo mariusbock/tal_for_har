@@ -2,7 +2,7 @@
 Clone repository:
 
 ```
-git clone anonymized
+git clone git@github.com:mariusbock/tal_for_har.git
 cd tal_for_har
 ```
 
