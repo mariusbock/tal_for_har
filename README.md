@@ -10,7 +10,7 @@ Additional results and figures can be found in the `supplementary_material.pdf`.
 Please follow instructions mentioned in the [INSTALL.md](/INSTALL.md) file.
 
 ## Download
-The datasets can be downloaded [here](https://www.kaggle.com/datasets/anonymisedanon/imwut-submission-5142-data). The dataset download does not contain the files necessary to perform the chunked experiments. In order to create these files, please run the `data_creation.py`script once for each dataset setting the parameters as follows:
+The datasets can be downloaded [here](https://uni-siegen.sciebo.de/s/BNuj9LWBaMs5tZs). The dataset download does not contain the files necessary to perform the chunked experiments. In order to create these files, please run the `data_creation.py`script once for each dataset setting the parameters as follows:
 
 - Opportunity: `create_annotations=True`, `chunked=True`, `chunk_size=[1, 5, 30, 60]`, `window_size=30`, `window_overlap=50`
 - All other datasets: `create_annotations=True`, `chunked=True`, `chunk_size=[1, 5, 30, 60]`, `window_size=50`, `window_overlap=50`
