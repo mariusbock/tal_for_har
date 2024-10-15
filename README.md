@@ -34,4 +34,11 @@ In order to log experiments to [Neptune.ai](https://neptune.ai) please provide `
 Marius Bock (marius.bock@uni-siegen.de)
 
 ## Cite as
-Coming soon
+@article{bock2023wear,
+  title={Temporal Action Localization for Inertial-based Human Activity Recognition},
+  author={Bock, Marius and Moeller, Michael and Van Laerhoven, Kristof},
+  volume={abs/2311.15831},
+  journal={CoRR},
+  year={2024},
+  url={https://arxiv.org/abs/2311.15831}
+}
