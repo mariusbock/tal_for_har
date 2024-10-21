@@ -40,13 +40,17 @@ Marius Bock (marius.bock@uni-siegen.de)
 
 ## Cite as
 ```
-@article{bock2024talforhar,
-  title={Temporal Action Localization for Inertial-based Human Activity Recognition},
-  author={Bock, Marius and Moeller, Michael and Van Laerhoven, Kristof},
-  volume={abs/2311.15831},
-  journal={CoRR},
-  year={2024},
-  url={https://arxiv.org/abs/2311.15831}
+@article{bock2024wear,
+    author={Bock, Marius and Moeller, Michael and Van Laerhoven, Kristof},
+    title={Temporal Action Localization for Inertial-based Human Activity Recognition},
+    year = {2024},
+    volume = {8},
+    number = {4},
+    journal = {Proc. ACM Interact. Mob. Wearable Ubiquitous Technol. (IMWUT)},
+    numpages = {19},
+    articleno = {174},
+    doi = {10.1145/3699770},
+    url={https://dl.acm.org/doi/10.1145/3699770}
 }
 ```
 [cc-by-nc-sa]: http://creativecommons.org/licenses/by-nc-sa/4.0/
