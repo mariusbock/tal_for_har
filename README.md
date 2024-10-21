@@ -40,7 +40,7 @@ Marius Bock (marius.bock@uni-siegen.de)
 
 ## Cite as
 ```
-@article{bock2024wear,
+@article{bock2024talforhar,
     author={Bock, Marius and Moeller, Michael and Van Laerhoven, Kristof},
     title={Temporal Action Localization for Inertial-based Human Activity Recognition},
     year = {2024},
